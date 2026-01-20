@@ -1,18 +1,30 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-
 export async function POST(request: NextRequest) {
   try {
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      console.error("GEMINI_API_KEY is not set");
+      return NextResponse.json({ error: "API 설정 오류입니다." }, { status: 500 });
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
     const { image } = await request.json();
 
     if (!image) {
       return NextResponse.json({ error: "이미지가 필요합니다." }, { status: 400 });
     }
 
-    const base64Data = image.split(",")[1];
-    const mimeType = image.split(";")[0].split(":")[1];
+    // base64 데이터 추출
+    const base64Match = image.match(/^data:(.+);base64,(.+)$/);
+    if (!base64Match) {
+      return NextResponse.json({ error: "이미지 형식이 올바르지 않습니다." }, { status: 400 });
+    }
+
+    const mimeType = base64Match[1];
+    const base64Data = base64Match[2];
 
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
@@ -70,10 +82,23 @@ export async function POST(request: NextRequest) {
     const text = response.text();
 
     return NextResponse.json({ result: text });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Gemini API error:", error);
+
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+    if (errorMessage.includes("API_KEY")) {
+      return NextResponse.json({ error: "API 키가 유효하지 않습니다." }, { status: 500 });
+    }
+    if (errorMessage.includes("SAFETY")) {
+      return NextResponse.json({ error: "이미지를 분석할 수 없습니다. 다른 사진을 시도해주세요." }, { status: 400 });
+    }
+    if (errorMessage.includes("quota") || errorMessage.includes("rate")) {
+      return NextResponse.json({ error: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요." }, { status: 429 });
+    }
+
     return NextResponse.json(
-      { error: "분석 중 오류가 발생했습니다. 다시 시도해주세요." },
+      { error: `분석 중 오류가 발생했습니다: ${errorMessage}` },
       { status: 500 }
     );
   }
