@@ -85,20 +85,25 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     console.error("Gemini API error:", error);
 
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStr = JSON.stringify(error, Object.getOwnPropertyNames(error || {}));
+    console.error("Error details:", errorStr);
 
-    if (errorMessage.includes("API_KEY")) {
+    if (errorMessage.includes("API_KEY") || errorMessage.includes("API key")) {
       return NextResponse.json({ error: "API 키가 유효하지 않습니다." }, { status: 500 });
     }
-    if (errorMessage.includes("SAFETY")) {
+    if (errorMessage.includes("SAFETY") || errorMessage.includes("blocked")) {
       return NextResponse.json({ error: "이미지를 분석할 수 없습니다. 다른 사진을 시도해주세요." }, { status: 400 });
     }
-    if (errorMessage.includes("quota") || errorMessage.includes("rate")) {
-      return NextResponse.json({ error: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요." }, { status: 429 });
+    if (errorMessage.includes("quota") || errorMessage.includes("rate") || errorMessage.includes("429") || errorMessage.includes("Resource")) {
+      return NextResponse.json({ error: "요청이 너무 많습니다. 1분 후 다시 시도해주세요." }, { status: 429 });
+    }
+    if (errorMessage.includes("not found") || errorMessage.includes("404")) {
+      return NextResponse.json({ error: "API 모델을 찾을 수 없습니다." }, { status: 500 });
     }
 
     return NextResponse.json(
-      { error: `분석 중 오류가 발생했습니다: ${errorMessage}` },
+      { error: `분석 오류: ${errorMessage.slice(0, 100)}` },
       { status: 500 }
     );
   }
