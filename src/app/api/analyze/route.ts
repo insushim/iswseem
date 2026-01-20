@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     const mimeType = base64Match[1];
     const base64Data = base64Match[2];
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-05-20" });
 
     const prompt = `당신은 전문 관상가입니다. 이 얼굴 사진을 분석하여 관상학적 해석을 제공해주세요.
 

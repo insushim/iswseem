@@ -10,20 +10,61 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+  // 이미지 압축 함수
+  const compressImage = (file: File, maxWidth: number = 800, quality: number = 0.7): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+
+          // 비율 유지하며 리사이즈
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("Canvas context not available"));
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
+          resolve(compressedDataUrl);
+        };
+        img.onerror = () => reject(new Error("Image load failed"));
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error("File read failed"));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        setError("파일 크기는 10MB 이하여야 합니다.");
+      if (file.size > 20 * 1024 * 1024) {
+        setError("파일 크기는 20MB 이하여야 합니다.");
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImage(reader.result as string);
-        setResult(null);
+
+      try {
         setError(null);
-      };
-      reader.readAsDataURL(file);
+        // 이미지 압축 (800px, 70% 품질)
+        const compressedImage = await compressImage(file, 800, 0.7);
+        setImage(compressedImage);
+        setResult(null);
+      } catch {
+        setError("이미지 처리 중 오류가 발생했습니다.");
+      }
     }
   };
 
@@ -108,7 +149,7 @@ export default function Home() {
                 <div className="text-4xl sm:text-6xl mb-3 sm:mb-4 text-center">🖼️</div>
                 <p className="text-lg sm:text-xl text-white mb-2 text-center">갤러리에서 선택</p>
                 <p className="text-purple-200 text-xs sm:text-sm text-center">클릭하여 사진을 선택하세요</p>
-                <p className="text-purple-300/60 text-xs mt-2 text-center">JPG, PNG (최대 10MB)</p>
+                <p className="text-purple-300/60 text-xs mt-2 text-center">JPG, PNG (최대 20MB)</p>
               </div>
               <input
                 ref={fileInputRef}
