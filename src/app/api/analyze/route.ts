@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     const mimeType = base64Match[1];
     const base64Data = base64Match[2];
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const prompt = `당신은 전문 관상가입니다. 이 얼굴 사진을 분석하여 관상학적 해석을 제공해주세요.
 
@@ -94,6 +94,9 @@ export async function POST(request: NextRequest) {
     }
     if (errorMessage.includes("SAFETY") || errorMessage.includes("blocked")) {
       return NextResponse.json({ error: "이미지를 분석할 수 없습니다. 다른 사진을 시도해주세요." }, { status: 400 });
+    }
+    if (errorMessage.includes("not valid") || errorMessage.includes("invalid image")) {
+      return NextResponse.json({ error: "이미지가 너무 작거나 손상되었습니다. 다른 사진을 시도해주세요." }, { status: 400 });
     }
     if (errorMessage.includes("quota") || errorMessage.includes("rate") || errorMessage.includes("429") || errorMessage.includes("Resource")) {
       return NextResponse.json({ error: "요청이 너무 많습니다. 1분 후 다시 시도해주세요." }, { status: 429 });
