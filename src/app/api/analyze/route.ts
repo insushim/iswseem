@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     const mimeType = base64Match[1];
     const base64Data = base64Match[2];
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     const prompt = `당신은 전문 관상가입니다. 이 얼굴 사진을 분석하여 관상학적 해석을 제공해주세요.
 
@@ -63,10 +63,16 @@ export async function POST(request: NextRequest) {
 ## 💕 연애/대인운
 (대인관계와 연애운에 대한 분석)
 
-## 🌟 조언
-(삶에서 주의할 점이나 장점을 살리는 조언)
+## ⚠️ 주의할 점
+(이 관상을 가진 사람이 살면서 특히 조심해야 할 부분들을 구체적으로 설명. 건강, 대인관계, 금전, 감정 조절 등 다양한 측면에서 주의사항을 3-5가지 제시)
 
-친근하고 긍정적인 톤으로 작성해주세요. 한국어로 답변해주세요.`;
+## 🔧 보완할 점
+(관상학적으로 부족하거나 아쉬운 부분을 보완하는 방법 제시. 행동 습관, 마인드셋, 외모 관리, 인간관계 개선 등 실천 가능한 조언을 3-5가지 제시)
+
+## 🌟 종합 조언
+(위의 분석을 바탕으로 장점을 살리고 단점을 보완하는 종합적인 삶의 조언)
+
+친근하고 긍정적인 톤으로 작성하되, 주의할 점과 보완할 점은 솔직하고 구체적으로 작성해주세요. 한국어로 답변해주세요.`;
 
     const result = await model.generateContent([
       prompt,
