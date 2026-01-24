@@ -15,23 +15,37 @@ interface SavedReading {
 }
 
 // 카카오톡 인앱 브라우저 감지
-const isKakaoInApp = () => {
-  if (typeof navigator === "undefined") return false;
+const isKakaoInApp = (): boolean => {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
   const ua = navigator.userAgent.toLowerCase();
-  return ua.includes("kakaotalk");
+  return ua.indexOf("kakaotalk") !== -1;
+};
+
+// 안전한 localStorage 접근
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    if (typeof window === "undefined") return null;
+    try {
+      return window.localStorage.getItem(key);
+    } catch (e) {
+      console.error("localStorage 읽기 실패:", e);
+      return null;
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(key, value);
+    } catch (e) {
+      console.error("localStorage 쓰기 실패:", e);
+    }
+  }
 };
 
 export default function Home() {
   const [image, setImage] = useState<string | null>(null);
   const [isKakao, setIsKakao] = useState(false);
-
-  // PWA 서비스 워커 등록 & 카카오 감지
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
-    }
-    setIsKakao(isKakaoInApp());
-  }, []);
+  const [mounted, setMounted] = useState(false);
 
   const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,28 +67,87 @@ export default function Home() {
   const [showHistory, setShowHistory] = useState(false);
   const [showSaveOptions, setShowSaveOptions] = useState(false);
 
-  // localStorage에서 히스토리 불러오기
+  // 클라이언트 마운트 확인
   useEffect(() => {
-    const saved = localStorage.getItem("faceReadingHistory");
-    if (saved) {
-      try {
-        setSavedReadings(JSON.parse(saved));
-      } catch {
-        console.error("히스토리 로드 실패");
-      }
+    setMounted(true);
+    setIsKakao(isKakaoInApp());
+
+    // PWA 서비스 워커 등록
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(function() {});
+    }
+
+    // Expo 앱에서 이미지 수신 함수 등록
+    if (typeof window !== "undefined") {
+      (window as any).setImageFromApp = function(base64Image: string) {
+        setImage(base64Image);
+        setResult(null);
+        setChatMessages([]);
+      };
+
+      // 앱에서 이미지 받는 이벤트 리스너
+      var handleAppImage = function(e: any) {
+        var base64Image = e.detail ? e.detail.image : null;
+        if (base64Image) {
+          setImage(base64Image);
+          setResult(null);
+          setChatMessages([]);
+        }
+      };
+      window.addEventListener("appImageReceived", handleAppImage as any);
+
+      // pendingImage 체크
+      var handlePendingImage = function() {
+        var pending = safeLocalStorage.getItem("pendingImage");
+        if (pending) {
+          setImage(pending);
+          setResult(null);
+          setChatMessages([]);
+          safeLocalStorage.setItem("pendingImage", "");
+        }
+      };
+      window.addEventListener("pendingImageReady", handlePendingImage);
+
+      // 초기 pendingImage 체크
+      handlePendingImage();
+
+      return function() {
+        window.removeEventListener("appImageReceived", handleAppImage as any);
+        window.removeEventListener("pendingImageReady", handlePendingImage);
+      };
     }
   }, []);
 
+  // localStorage에서 히스토리 불러오기 (마운트 후)
+  useEffect(() => {
+    if (!mounted) return;
+
+    const saved = safeLocalStorage.getItem("faceReadingHistory");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setSavedReadings(parsed);
+        }
+      } catch (e) {
+        console.error("히스토리 파싱 실패:", e);
+      }
+    }
+  }, [mounted]);
+
   // 이미지 압축 함수
-  const compressImage = (file: File, maxWidth: number = 800, quality: number = 0.7): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          let width = img.width;
-          let height = img.height;
+  const compressImage = function(file: File, maxWidth: number, quality: number): Promise<string> {
+    maxWidth = maxWidth || 800;
+    quality = quality || 0.7;
+
+    return new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var img = new Image();
+        img.onload = function() {
+          var canvas = document.createElement("canvas");
+          var width = img.width;
+          var height = img.height;
 
           if (width > maxWidth) {
             height = (height * maxWidth) / width;
@@ -84,92 +157,96 @@ export default function Home() {
           canvas.width = width;
           canvas.height = height;
 
-          const ctx = canvas.getContext("2d");
+          var ctx = canvas.getContext("2d");
           if (!ctx) {
             reject(new Error("Canvas context not available"));
             return;
           }
 
           ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
+          var compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
           resolve(compressedDataUrl);
         };
-        img.onerror = () => reject(new Error("Image load failed"));
-        img.src = e.target?.result as string;
+        img.onerror = function() { reject(new Error("Image load failed")); };
+        var result = e.target ? e.target.result : null;
+        img.src = result as string;
       };
-      reader.onerror = () => reject(new Error("File read failed"));
+      reader.onerror = function() { reject(new Error("File read failed")); };
       reader.readAsDataURL(file);
     });
   };
 
-  const handleImageChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleImageChange = function(e: ChangeEvent<HTMLInputElement>) {
+    var files = e.target.files;
+    var file = files ? files[0] : null;
     if (file) {
       if (file.size > 20 * 1024 * 1024) {
         setError("파일 크기는 20MB 이하여야 합니다.");
         return;
       }
 
-      try {
-        setError(null);
-        const compressedImage = await compressImage(file, 800, 0.7);
-        setImage(compressedImage);
-        setResult(null);
-        setChatMessages([]);
-      } catch {
-        setError("이미지 처리 중 오류가 발생했습니다.");
-      }
+      setError(null);
+      compressImage(file, 800, 0.7)
+        .then(function(compressedImage) {
+          setImage(compressedImage);
+          setResult(null);
+          setChatMessages([]);
+        })
+        .catch(function() {
+          setError("이미지 처리 중 오류가 발생했습니다.");
+        });
     }
   };
 
   // 자동 저장 함수 (알림 없이)
-  const autoSaveToHistory = useCallback((analysisResult: string, imageData: string) => {
-    const newReading: SavedReading = {
+  const autoSaveToHistory = useCallback(function(analysisResult: string, imageData: string) {
+    var newReading: SavedReading = {
       id: Date.now().toString(),
       date: new Date().toLocaleString("ko-KR"),
       thumbnail: imageData,
       result: analysisResult,
     };
 
-    setSavedReadings(prev => {
-      const updatedReadings = [newReading, ...prev].slice(0, 20);
-      localStorage.setItem("faceReadingHistory", JSON.stringify(updatedReadings));
+    setSavedReadings(function(prev) {
+      var updatedReadings = [newReading].concat(prev).slice(0, 20);
+      safeLocalStorage.setItem("faceReadingHistory", JSON.stringify(updatedReadings));
       return updatedReadings;
     });
   }, []);
 
-  const handleAnalyze = async () => {
+  const handleAnalyze = function() {
     if (!image) return;
 
     setLoading(true);
     setError(null);
 
-    try {
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image }),
+    fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: image }),
+    })
+      .then(function(response) {
+        return response.json().then(function(data) {
+          if (!response.ok) {
+            throw new Error(data.error || "분석 실패");
+          }
+          return data;
+        });
+      })
+      .then(function(data) {
+        setResult(data.result);
+        setChatMessages([]);
+        autoSaveToHistory(data.result, image);
+      })
+      .catch(function(err) {
+        setError(err instanceof Error ? err.message : "분석 중 오류가 발생했습니다.");
+      })
+      .finally(function() {
+        setLoading(false);
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "분석 실패");
-      }
-
-      setResult(data.result);
-      setChatMessages([]);
-
-      // 자동 저장
-      autoSaveToHistory(data.result, image);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "분석 중 오류가 발생했습니다.");
-    } finally {
-      setLoading(false);
-    }
   };
 
-  const handleReset = () => {
+  const handleReset = function() {
     setImage(null);
     setResult(null);
     setError(null);
@@ -181,7 +258,7 @@ export default function Home() {
   };
 
   // 텍스트 정리 함수
-  const getCleanText = useCallback((text: string) => {
+  const getCleanText = useCallback(function(text: string) {
     return text
       .replace(/##\s*/g, "\n\n★ ")
       .replace(/###\s*/g, "\n• ")
@@ -190,32 +267,32 @@ export default function Home() {
   }, []);
 
   // 히스토리에 저장
-  const saveToHistory = useCallback(() => {
+  const saveToHistory = useCallback(function() {
     if (!result || !image) return;
 
-    const newReading: SavedReading = {
+    var newReading: SavedReading = {
       id: Date.now().toString(),
       date: new Date().toLocaleString("ko-KR"),
       thumbnail: image,
       result: result,
     };
 
-    const updatedReadings = [newReading, ...savedReadings].slice(0, 20); // 최대 20개
+    var updatedReadings = [newReading].concat(savedReadings).slice(0, 20);
     setSavedReadings(updatedReadings);
-    localStorage.setItem("faceReadingHistory", JSON.stringify(updatedReadings));
-    alert("관상 분석 결과가 저장되었습니다!\n📁 저장 내역에서 확인할 수 있습니다.");
+    safeLocalStorage.setItem("faceReadingHistory", JSON.stringify(updatedReadings));
+    alert("관상 분석 결과가 저장되었습니다!\n저장 내역에서 확인할 수 있습니다.");
     setShowSaveOptions(false);
   }, [result, image, savedReadings]);
 
   // 히스토리에서 삭제
-  const deleteFromHistory = useCallback((id: string) => {
-    const updatedReadings = savedReadings.filter(r => r.id !== id);
+  const deleteFromHistory = useCallback(function(id: string) {
+    var updatedReadings = savedReadings.filter(function(r) { return r.id !== id; });
     setSavedReadings(updatedReadings);
-    localStorage.setItem("faceReadingHistory", JSON.stringify(updatedReadings));
+    safeLocalStorage.setItem("faceReadingHistory", JSON.stringify(updatedReadings));
   }, [savedReadings]);
 
   // 히스토리에서 불러오기
-  const loadFromHistory = useCallback((reading: SavedReading) => {
+  const loadFromHistory = useCallback(function(reading: SavedReading) {
     setImage(reading.thumbnail);
     setResult(reading.result);
     setChatMessages([]);
@@ -223,90 +300,96 @@ export default function Home() {
   }, []);
 
   // 클립보드에 복사
-  const copyToClipboard = useCallback(async () => {
+  const copyToClipboard = useCallback(function() {
     if (!result) return;
 
-    const cleanText = getCleanText(result);
-    const fullText = `✨ FaceFortune.ai 관상 분석 결과 ✨
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${cleanText}
+    var cleanText = getCleanText(result);
+    var fullText = "FaceFortune.ai 관상 분석 결과\n" +
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+      cleanText +
+      "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+      "FaceFortune.ai - AI 관상 분석 서비스\n" +
+      "https://isw-seem.vercel.app";
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📱 FaceFortune.ai - AI 관상 분석 서비스
-🔗 https://isw-seem.vercel.app
-`;
-
-    try {
-      await navigator.clipboard.writeText(fullText);
-      alert("관상 결과가 클립보드에 복사되었습니다!\n메모장이나 카톡에 붙여넣기 하세요.");
-      setShowSaveOptions(false);
-    } catch {
-      alert("클립보드 복사에 실패했습니다. 다른 저장 방법을 시도해주세요.");
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(fullText)
+        .then(function() {
+          alert("관상 결과가 클립보드에 복사되었습니다!\n메모장이나 카톡에 붙여넣기 하세요.");
+          setShowSaveOptions(false);
+        })
+        .catch(function() {
+          alert("클립보드 복사에 실패했습니다. 다른 저장 방법을 시도해주세요.");
+        });
+    } else {
+      alert("이 브라우저에서는 클립보드 복사가 지원되지 않습니다.");
     }
   }, [result, getCleanText]);
 
   // 텍스트 파일로 다운로드
-  const downloadAsText = useCallback(() => {
+  const downloadAsText = useCallback(function() {
     if (!result) return;
 
-    const cleanText = getCleanText(result);
-    const fullText = `✨ FaceFortune.ai 관상 분석 결과 ✨
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${cleanText}
+    var cleanText = getCleanText(result);
+    var fullText = "FaceFortune.ai 관상 분석 결과\n" +
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+      cleanText +
+      "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+      "FaceFortune.ai - AI 관상 분석 서비스\n" +
+      "https://isw-seem.vercel.app";
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📱 FaceFortune.ai - AI 관상 분석 서비스
-🔗 https://isw-seem.vercel.app
-`;
-
-    const blob = new Blob([fullText], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
+    var blob = new Blob([fullText], { type: "text/plain;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
     link.href = url;
-    link.download = `facefortune-${new Date().toISOString().slice(0,10)}.txt`;
+    link.download = "facefortune-" + new Date().toISOString().slice(0,10) + ".txt";
     link.click();
     URL.revokeObjectURL(url);
     setShowSaveOptions(false);
   }, [result, getCleanText]);
 
   // JSON으로 다운로드 (이미지 포함)
-  const downloadAsJson = useCallback(() => {
+  const downloadAsJson = useCallback(function() {
     if (!result || !image) return;
 
-    const data = {
+    var data = {
       date: new Date().toISOString(),
       image: image,
       result: result,
       source: "FaceFortune.ai"
     };
 
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
     link.href = url;
-    link.download = `facefortune-${new Date().toISOString().slice(0,10)}.json`;
+    link.download = "facefortune-" + new Date().toISOString().slice(0,10) + ".json";
     link.click();
     URL.revokeObjectURL(url);
     setShowSaveOptions(false);
   }, [result, image]);
 
-  // 기존 저장 버튼 (간단한 저장)
-  const handleSaveResult = useCallback(async () => {
+  // 기존 저장 버튼
+  const handleSaveResult = useCallback(function() {
     if (!result) return;
     setShowSaveOptions(true);
   }, [result]);
 
   // TTS 기능
-  const speakResult = useCallback(() => {
+  const speakResult = useCallback(function() {
     if (!result || typeof window === "undefined") return;
 
     // 카카오톡 인앱 브라우저에서는 외부 브라우저 안내
     if (isKakao) {
-      alert("카카오톡 내 브라우저에서는 음성 읽기가 지원되지 않습니다.\n\n우측 상단 ⋮ 메뉴 → '다른 브라우저로 열기'를 선택해주세요.");
+      alert("카카오톡 내 브라우저에서는 음성 읽기가 지원되지 않습니다.\n\n우측 상단 메뉴에서 다른 브라우저로 열기를 선택해주세요.");
       return;
     }
 
-    const synth = window.speechSynthesis;
+    if (!window.speechSynthesis) {
+      alert("이 브라우저에서는 음성 읽기가 지원되지 않습니다.");
+      return;
+    }
+
+    var synth = window.speechSynthesis;
 
     if (isSpeaking) {
       synth.cancel();
@@ -314,68 +397,83 @@ ${cleanText}
       return;
     }
 
-    const cleanText = result
+    var cleanText = result
       .replace(/##\s*/g, ". ")
       .replace(/###\s*/g, ". ")
       .replace(/\*\*/g, "")
       .replace(/-\s+/g, " ")
       .replace(/\n+/g, " ");
 
-    const utterance = new SpeechSynthesisUtterance(cleanText);
+    var utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = "ko-KR";
     utterance.rate = 0.9;
     utterance.pitch = 1;
 
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
+    utterance.onend = function() { setIsSpeaking(false); };
+    utterance.onerror = function() { setIsSpeaking(false); };
 
     setIsSpeaking(true);
     synth.speak(utterance);
   }, [result, isSpeaking, isKakao]);
 
-  const stopSpeaking = () => {
-    if (typeof window !== "undefined") {
+  const stopSpeaking = function() {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
     }
   };
 
   // 챗봇 메시지 전송
-  const handleChatSubmit = async (e: FormEvent) => {
+  const handleChatSubmit = function(e: FormEvent) {
     e.preventDefault();
     if (!chatInput.trim() || !result || chatLoading) return;
 
-    const userMessage = chatInput.trim();
+    var userMessage = chatInput.trim();
     setChatInput("");
-    setChatMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    setChatMessages(function(prev) { return prev.concat([{ role: "user", content: userMessage }]); });
     setChatLoading(true);
 
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage, analysisResult: result }),
+    fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: userMessage, analysisResult: result }),
+    })
+      .then(function(response) {
+        return response.json().then(function(data) {
+          if (!response.ok) {
+            throw new Error(data.error || "답변 생성 실패");
+          }
+          return data;
+        });
+      })
+      .then(function(data) {
+        setChatMessages(function(prev) { return prev.concat([{ role: "assistant", content: data.reply }]); });
+      })
+      .catch(function(err) {
+        setChatMessages(function(prev) {
+          return prev.concat([{ role: "assistant", content: err instanceof Error ? err.message : "답변 생성 중 오류가 발생했습니다." }]);
+        });
+      })
+      .finally(function() {
+        setChatLoading(false);
+        setTimeout(function() {
+          if (chatEndRef.current) {
+            chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+          }
+        }, 100);
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "답변 생성 실패");
-      }
-
-      setChatMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
-    } catch (err) {
-      setChatMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: err instanceof Error ? err.message : "답변 생성 중 오류가 발생했습니다." },
-      ]);
-    } finally {
-      setChatLoading(false);
-      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-    }
   };
 
-  const quickQuestions = ["올해 재물운은 어때요?", "연애운이 궁금해요", "직장 운세는요?", "건강 관련 조언 주세요"];
+  var quickQuestions = ["올해 재물운은 어때요?", "연애운이 궁금해요", "직장 운세는요?", "건강 관련 조언 주세요"];
+
+  // 로딩 중일 때 빈 화면 방지
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-[#0a0a1a] flex items-center justify-center">
+        <div className="text-white">로딩 중...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0a1a] relative overflow-hidden">
@@ -440,7 +538,7 @@ ${cleanText}
 
               {/* 업로드 버튼들 */}
               <button
-                onClick={() => cameraInputRef.current?.click()}
+                onClick={function() { if (cameraInputRef.current) cameraInputRef.current.click(); }}
                 className="w-full group relative bg-gradient-to-r from-amber-500 to-orange-500 text-white py-5 px-8 rounded-2xl font-bold text-lg overflow-hidden transition-all hover:shadow-lg hover:shadow-amber-500/25 active:scale-[0.98]"
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-amber-400 to-orange-400 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -465,7 +563,7 @@ ${cleanText}
 
               <div
                 className="border-2 border-dashed border-white/10 rounded-2xl p-10 hover:border-amber-500/30 hover:bg-white/[0.02] transition-all cursor-pointer group"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={function() { if (fileInputRef.current) fileInputRef.current.click(); }}
               >
                 <div className="text-center">
                   <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-500/20 to-purple-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -474,7 +572,7 @@ ${cleanText}
                     </svg>
                   </div>
                   <p className="text-lg text-white font-medium mb-1">갤러리에서 선택</p>
-                  <p className="text-slate-500 text-sm">클릭하여 이미지 선택 • JPG, PNG (최대 20MB)</p>
+                  <p className="text-slate-500 text-sm">클릭하여 이미지 선택 - JPG, PNG (최대 20MB)</p>
                 </div>
               </div>
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
@@ -545,7 +643,7 @@ ${cleanText}
 
                           {/* 저장 옵션 드롭다운 */}
                           {showSaveOptions && (
-                            <div className="absolute top-full left-0 mt-2 w-56 bg-slate-900/95 backdrop-blur-xl rounded-xl shadow-2xl border border-white/10 overflow-hidden z-50">
+                            <div className="absolute top-full left-0 mt-2 w-56 bg-slate-900 rounded-xl shadow-2xl border border-white/10 overflow-hidden z-50">
                               <div className="p-2 space-y-1">
                                 <button
                                   onClick={saveToHistory}
@@ -590,7 +688,7 @@ ${cleanText}
                               </div>
                               <div className="border-t border-white/10 p-2">
                                 <button
-                                  onClick={() => setShowSaveOptions(false)}
+                                  onClick={function() { setShowSaveOptions(false); }}
                                   className="w-full text-center text-sm text-slate-400 hover:text-white py-2 transition-all"
                                 >
                                   닫기
@@ -601,7 +699,7 @@ ${cleanText}
                         </div>
 
                         <button
-                          onClick={() => setShowHistory(true)}
+                          onClick={function() { setShowHistory(true); }}
                           className="inline-flex items-center gap-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 px-4 py-2 rounded-lg text-sm font-medium transition-all border border-indigo-500/20"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -611,11 +709,11 @@ ${cleanText}
                         </button>
                         <button
                           onClick={speakResult}
-                          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
+                          className={"inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border " + (
                             isSpeaking
                               ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
                               : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border-emerald-500/20"
-                          }`}
+                          )}
                         >
                           {isSpeaking ? (
                             <>
@@ -639,22 +737,22 @@ ${cleanText}
                       {/* 결과 내용 */}
                       <div className="bg-black/20 rounded-2xl p-5 sm:p-6 text-white max-h-[400px] overflow-y-auto custom-scrollbar">
                         <div className="text-sm sm:text-base leading-relaxed space-y-4">
-                          {result.split(/\n(?=## )/).map((section, sectionIdx) => {
-                            const lines = section.split('\n');
+                          {result.split(/\n(?=## )/).map(function(section, sectionIdx) {
+                            var lines = section.split("\n");
                             return (
                               <div key={sectionIdx} className="space-y-2">
-                                {lines.map((line, lineIdx) => {
-                                  if (line.startsWith('## ')) {
-                                    return <h2 key={lineIdx} className="text-lg font-bold text-amber-300 mt-4 mb-2">{line.replace('## ', '')}</h2>;
+                                {lines.map(function(line, lineIdx) {
+                                  if (line.indexOf("## ") === 0) {
+                                    return <h2 key={lineIdx} className="text-lg font-bold text-amber-300 mt-4 mb-2">{line.replace("## ", "")}</h2>;
                                   }
-                                  if (line.startsWith('### ')) {
-                                    return <h3 key={lineIdx} className="text-base font-semibold text-violet-300 mt-3 mb-1">{line.replace('### ', '')}</h3>;
+                                  if (line.indexOf("### ") === 0) {
+                                    return <h3 key={lineIdx} className="text-base font-semibold text-violet-300 mt-3 mb-1">{line.replace("### ", "")}</h3>;
                                   }
-                                  if (line.startsWith('- ')) {
+                                  if (line.indexOf("- ") === 0) {
                                     return <p key={lineIdx} className="text-slate-300 pl-2">{line}</p>;
                                   }
-                                  if (line.trim() === '') return null;
-                                  return <p key={lineIdx} className="text-slate-200">{line.replace(/\*\*(.*?)\*\*/g, '$1')}</p>;
+                                  if (line.trim() === "") return null;
+                                  return <p key={lineIdx} className="text-slate-200">{line.replace(/\*\*(.*?)\*\*/g, "$1")}</p>;
                                 })}
                               </div>
                             );
@@ -692,15 +790,17 @@ ${cleanText}
 
                   {/* 빠른 질문 */}
                   <div className="flex flex-wrap gap-2 mb-4">
-                    {quickQuestions.map((q, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setChatInput(q)}
-                        className="bg-white/5 hover:bg-white/10 text-slate-300 text-sm px-4 py-2 rounded-full transition-all border border-white/5 hover:border-white/10"
-                      >
-                        {q}
-                      </button>
-                    ))}
+                    {quickQuestions.map(function(q, idx) {
+                      return (
+                        <button
+                          key={idx}
+                          onClick={function() { setChatInput(q); }}
+                          className="bg-white/5 hover:bg-white/10 text-slate-300 text-sm px-4 py-2 rounded-full transition-all border border-white/5 hover:border-white/10"
+                        >
+                          {q}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {/* 채팅 영역 */}
@@ -711,19 +811,21 @@ ${cleanText}
                       </p>
                     ) : (
                       <div className="space-y-3">
-                        {chatMessages.map((msg, idx) => (
-                          <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                            <div
-                              className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm ${
-                                msg.role === "user"
-                                  ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-br-md"
-                                  : "bg-white/10 text-slate-200 rounded-bl-md"
-                              }`}
-                            >
-                              {msg.content}
+                        {chatMessages.map(function(msg, idx) {
+                          return (
+                            <div key={idx} className={"flex " + (msg.role === "user" ? "justify-end" : "justify-start")}>
+                              <div
+                                className={"max-w-[85%] px-4 py-2.5 rounded-2xl text-sm " + (
+                                  msg.role === "user"
+                                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-br-md"
+                                    : "bg-white/10 text-slate-200 rounded-bl-md"
+                                )}
+                              >
+                                {msg.content}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                         {chatLoading && (
                           <div className="flex justify-start">
                             <div className="bg-white/10 text-slate-300 px-4 py-2.5 rounded-2xl rounded-bl-md text-sm">
@@ -747,7 +849,7 @@ ${cleanText}
                     <input
                       type="text"
                       value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
+                      onChange={function(e) { setChatInput(e.target.value); }}
                       placeholder="궁금한 점을 물어보세요..."
                       className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/25 text-sm"
                       disabled={chatLoading}
@@ -771,13 +873,13 @@ ${cleanText}
         {/* 푸터 */}
         <footer className="text-center mt-10 space-y-2">
           <p className="text-slate-500 text-sm">본 서비스는 AI 기반 엔터테인먼트 목적으로 제공됩니다</p>
-          <p className="text-slate-600 text-xs">Powered by Google Gemini AI • FaceFortune.ai</p>
+          <p className="text-slate-600 text-xs">Powered by Google Gemini AI - FaceFortune.ai</p>
         </footer>
       </div>
 
       {/* 히스토리 모달 */}
       {showHistory && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
           <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl max-w-2xl w-full max-h-[80vh] overflow-hidden border border-white/10 shadow-2xl">
             {/* 모달 헤더 */}
             <div className="flex items-center justify-between p-6 border-b border-white/10">
@@ -785,7 +887,7 @@ ${cleanText}
                 <span>📚</span> 저장된 관상 기록
               </h2>
               <button
-                onClick={() => setShowHistory(false)}
+                onClick={function() { setShowHistory(false); }}
                 className="text-slate-400 hover:text-white transition-colors p-2"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -804,50 +906,52 @@ ${cleanText}
                 </div>
               ) : (
                 <div className="grid gap-4">
-                  {savedReadings.map((reading) => (
-                    <div
-                      key={reading.id}
-                      className="bg-white/5 rounded-2xl p-4 border border-white/10 hover:border-amber-500/30 transition-all group"
-                    >
-                      <div className="flex gap-4">
-                        {/* 썸네일 */}
-                        <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-black/30">
-                          <img
-                            src={reading.thumbnail}
-                            alt="관상 사진"
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
+                  {savedReadings.map(function(reading) {
+                    return (
+                      <div
+                        key={reading.id}
+                        className="bg-white/5 rounded-2xl p-4 border border-white/10 hover:border-amber-500/30 transition-all group"
+                      >
+                        <div className="flex gap-4">
+                          {/* 썸네일 */}
+                          <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-black/30">
+                            <img
+                              src={reading.thumbnail}
+                              alt="관상 사진"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
 
-                        {/* 정보 */}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-slate-400 text-sm mb-1">{reading.date}</p>
-                          <p className="text-white text-sm line-clamp-2">
-                            {reading.result.substring(0, 100)}...
-                          </p>
-                        </div>
+                          {/* 정보 */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-slate-400 text-sm mb-1">{reading.date}</p>
+                            <p className="text-white text-sm line-clamp-2">
+                              {reading.result.substring(0, 100)}...
+                            </p>
+                          </div>
 
-                        {/* 액션 버튼 */}
-                        <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => {
-                              loadFromHistory(reading);
-                              setShowHistory(false);
-                            }}
-                            className="bg-amber-500/20 text-amber-400 px-3 py-1.5 rounded-lg text-sm hover:bg-amber-500/30 transition-colors"
-                          >
-                            보기
-                          </button>
-                          <button
-                            onClick={() => deleteFromHistory(reading.id)}
-                            className="bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg text-sm hover:bg-red-500/30 transition-colors"
-                          >
-                            삭제
-                          </button>
+                          {/* 액션 버튼 */}
+                          <div className="flex flex-col gap-2">
+                            <button
+                              onClick={function() {
+                                loadFromHistory(reading);
+                                setShowHistory(false);
+                              }}
+                              className="bg-amber-500/20 text-amber-400 px-3 py-1.5 rounded-lg text-sm hover:bg-amber-500/30 transition-colors"
+                            >
+                              보기
+                            </button>
+                            <button
+                              onClick={function() { deleteFromHistory(reading.id); }}
+                              className="bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg text-sm hover:bg-red-500/30 transition-colors"
+                            >
+                              삭제
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -856,7 +960,7 @@ ${cleanText}
             {savedReadings.length > 0 && (
               <div className="p-4 border-t border-white/10 text-center">
                 <p className="text-slate-500 text-sm">
-                  총 {savedReadings.length}개의 기록 • 최대 20개까지 저장됩니다
+                  총 {savedReadings.length}개의 기록 - 최대 20개까지 저장됩니다
                 </p>
               </div>
             )}
@@ -864,7 +968,8 @@ ${cleanText}
         </div>
       )}
 
-      <style jsx global>{`
+      {/* 커스텀 스크롤바 스타일 */}
+      <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar {
           width: 6px;
         }
@@ -879,7 +984,7 @@ ${cleanText}
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
           background: rgba(255, 255, 255, 0.2);
         }
-      `}</style>
+      ` }} />
     </div>
   );
 }
