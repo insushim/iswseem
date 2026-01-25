@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
-    const prompt = `당신은 30년 경력의 전문 관상가이자 동양 철학 연구가입니다. 이 얼굴 사진을 깊이 있게 분석하여 상세한 관상학적 해석을 제공해주세요.
+    const prompt = `당신은 전문 관상 분석가이자 동양 철학 연구가입니다. 이 얼굴 사진을 깊이 있게 분석하여 상세한 관상학적 해석을 제공해주세요.
 
 다음 형식으로 상세하게 답변해주세요:
 

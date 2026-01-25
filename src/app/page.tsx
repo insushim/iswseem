@@ -490,10 +490,10 @@ export default function Home() {
             AI 기반 관상 분석 서비스
           </div>
           <h1 className="text-4xl sm:text-6xl font-black text-white mb-3 tracking-tight">
-            <span className="bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-200 bg-clip-text text-transparent">
+            <span className="text-amber-400">
               FaceFortune
             </span>
-            <span className="text-white/90">.ai</span>
+            <span className="text-white">.ai</span>
           </h1>
           <p className="text-base sm:text-lg text-slate-400 max-w-xl mx-auto">
             당신의 얼굴에서 운명을 읽어드립니다
