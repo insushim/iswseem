@@ -374,6 +374,37 @@ export default function Home() {
     setShowSaveOptions(true);
   }, [result]);
 
+  // 네이티브 앱 환경 감지
+  const [isNativeApp, setIsNativeApp] = useState(false);
+
+  // 네이티브 앱 감지 및 TTS 상태 이벤트 리스너
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // 네이티브 앱 환경 감지
+    var checkNativeApp = function() {
+      setIsNativeApp(!!(window as any).isNativeApp || !!(window as any).ReactNativeWebView);
+    };
+
+    // 초기 체크
+    checkNativeApp();
+
+    // 약간의 딜레이 후 재체크 (injectedJS가 실행되는 시간 고려)
+    var timeout = setTimeout(checkNativeApp, 500);
+
+    // 네이티브 TTS 상태 변경 리스너
+    var handleTTSStateChange = function(e: any) {
+      var speaking = e.detail ? e.detail.speaking : false;
+      setIsSpeaking(speaking);
+    };
+    window.addEventListener("nativeTTSStateChange", handleTTSStateChange);
+
+    return function() {
+      clearTimeout(timeout);
+      window.removeEventListener("nativeTTSStateChange", handleTTSStateChange);
+    };
+  }, []);
+
   // TTS 기능
   const speakResult = useCallback(function() {
     if (!result || typeof window === "undefined") return;
@@ -384,6 +415,24 @@ export default function Home() {
       return;
     }
 
+    var cleanText = result
+      .replace(/##\s*/g, ". ")
+      .replace(/###\s*/g, ". ")
+      .replace(/\*\*/g, "")
+      .replace(/-\s+/g, " ")
+      .replace(/\n+/g, " ");
+
+    // 네이티브 앱 환경에서는 네이티브 TTS 사용
+    if (isNativeApp && (window as any).nativeSpeak) {
+      if (isSpeaking) {
+        (window as any).nativeStopSpeaking();
+      } else {
+        (window as any).nativeSpeak(cleanText);
+      }
+      return;
+    }
+
+    // 웹 브라우저 환경
     if (!window.speechSynthesis) {
       alert("이 브라우저에서는 음성 읽기가 지원되지 않습니다.");
       return;
@@ -397,13 +446,6 @@ export default function Home() {
       return;
     }
 
-    var cleanText = result
-      .replace(/##\s*/g, ". ")
-      .replace(/###\s*/g, ". ")
-      .replace(/\*\*/g, "")
-      .replace(/-\s+/g, " ")
-      .replace(/\n+/g, " ");
-
     var utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = "ko-KR";
     utterance.rate = 0.9;
@@ -414,10 +456,19 @@ export default function Home() {
 
     setIsSpeaking(true);
     synth.speak(utterance);
-  }, [result, isSpeaking, isKakao]);
+  }, [result, isSpeaking, isKakao, isNativeApp]);
 
   const stopSpeaking = function() {
-    if (typeof window !== "undefined" && window.speechSynthesis) {
+    if (typeof window === "undefined") return;
+
+    // 네이티브 앱 환경
+    if (isNativeApp && (window as any).nativeStopSpeaking) {
+      (window as any).nativeStopSpeaking();
+      return;
+    }
+
+    // 웹 브라우저 환경
+    if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
     }

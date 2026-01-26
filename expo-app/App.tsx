@@ -15,6 +15,7 @@ import {
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import * as SplashScreen from 'expo-splash-screen';
 import * as ImagePicker from 'expo-image-picker';
+import * as Speech from 'expo-speech';
 
 // 스플래시 스크린 유지
 SplashScreen.preventAutoHideAsync();
@@ -113,6 +114,69 @@ export default function App() {
     }
   }, []);
 
+  // TTS 상태 관리
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  // TTS 시작
+  const startSpeech = useCallback(async (text: string) => {
+    try {
+      // 이미 재생 중이면 중지
+      const speaking = await Speech.isSpeakingAsync();
+      if (speaking) {
+        await Speech.stop();
+        setIsSpeaking(false);
+        webViewRef.current?.injectJavaScript(`
+          window.onTTSStateChange && window.onTTSStateChange(false);
+          true;
+        `);
+        return;
+      }
+
+      setIsSpeaking(true);
+      webViewRef.current?.injectJavaScript(`
+        window.onTTSStateChange && window.onTTSStateChange(true);
+        true;
+      `);
+
+      await Speech.speak(text, {
+        language: 'ko-KR',
+        rate: 0.9,
+        pitch: 1.0,
+        onDone: () => {
+          setIsSpeaking(false);
+          webViewRef.current?.injectJavaScript(`
+            window.onTTSStateChange && window.onTTSStateChange(false);
+            true;
+          `);
+        },
+        onError: () => {
+          setIsSpeaking(false);
+          webViewRef.current?.injectJavaScript(`
+            window.onTTSStateChange && window.onTTSStateChange(false);
+            true;
+          `);
+        },
+      });
+    } catch (error) {
+      console.log('Speech error:', error);
+      setIsSpeaking(false);
+    }
+  }, []);
+
+  // TTS 중지
+  const stopSpeech = useCallback(async () => {
+    try {
+      await Speech.stop();
+      setIsSpeaking(false);
+      webViewRef.current?.injectJavaScript(`
+        window.onTTSStateChange && window.onTTSStateChange(false);
+        true;
+      `);
+    } catch (error) {
+      console.log('Stop speech error:', error);
+    }
+  }, []);
+
   // WebView 메시지 수신 (파일 선택 요청)
   const onMessage = useCallback(async (event: any) => {
     try {
@@ -151,11 +215,17 @@ export default function App() {
             true;
           `);
         }
+      } else if (data.type === 'speak') {
+        // TTS 시작/토글
+        startSpeech(data.text);
+      } else if (data.type === 'stopSpeaking') {
+        // TTS 중지
+        stopSpeech();
       }
     } catch (error) {
       console.log('Message parsing error:', error);
     }
-  }, []);
+  }, [startSpeech, stopSpeech]);
 
   // 파일 다운로드 처리
   const onFileDownload = useCallback((event: any) => {
@@ -183,6 +253,32 @@ export default function App() {
   // WebView에 주입할 JavaScript - 파일 input을 앱 네이티브로 연결
   const injectedJavaScript = `
     (function() {
+      // 앱 환경 감지 플래그
+      window.isNativeApp = true;
+
+      // TTS 상태 변경 콜백 (앱에서 호출)
+      window.onTTSStateChange = function(speaking) {
+        window.dispatchEvent(new CustomEvent('nativeTTSStateChange', { detail: { speaking: speaking } }));
+      };
+
+      // 네이티브 TTS 함수 (웹에서 호출)
+      window.nativeSpeak = function(text) {
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'speak', text: text }));
+          return true;
+        }
+        return false;
+      };
+
+      // 네이티브 TTS 중지 함수
+      window.nativeStopSpeaking = function() {
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'stopSpeaking' }));
+          return true;
+        }
+        return false;
+      };
+
       // 앱에서 이미지 수신 함수
       window.receiveImageFromApp = function(base64Image) {
         // 현재 페이지의 setImage 함수 호출 시도
