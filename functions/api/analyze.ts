@@ -1,5 +1,6 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextRequest, NextResponse } from "next/server";
+interface Env {
+  GEMINI_API_KEY: string;
+}
 
 function buildPrompt(age?: number): string {
   const ageInfo = age
@@ -146,225 +147,180 @@ function buildPrompt(age?: number): string {
 (목/화/토/금/수 중 어떤 유형인지 판별하고, 복합형인 경우 주된 오행과 부수 오행을 설명. 해당 오행의 성격적 장점, 약점, 그리고 상생/상극 관계에서 주의할 점을 설명.)
 
 ## 📐 삼정(三停) 균형 분석
-- 상정(이마~눈썹): 초년운 분석 - 이마의 넓이, 높이, 주름, 일월각 상태
-- 중정(눈썹~코끝): 중년운 분석 - 눈, 코, 광대의 균형
-- 하정(코끝~턱): 말년운 분석 - 입, 법령선, 턱의 상태
+- 상정(이마~눈썹): 초년운 분석
+- 중정(눈썹~코끝): 중년운 분석
+- 하정(코끝~턱): 말년운 분석
 - 삼정 균형도: (균등/상정우세/중정우세/하정우세) 및 그 의미
 
 ## 👤 이목구비 정밀 분석
 
 ### 이마 (관록궁·부모궁·천이궁·복덕궁)
-- 형태: (넓이, 높이, 모양, 이마선, M자/각진/둥근, 주름 유무와 수)
-- 길상(吉相): (긍정적 해석 - 지적 능력, 사회적 성공 가능성, 부모운)
-- 흉상(凶相)/주의점: (이마에서 보이는 약점이나 주의할 부분. 없으면 없다고 솔직히 언급)
-- 운세 시기: 15-30세 초년운 흐름 구체적 분석
+- 형태, 길상(吉相), 흉상(凶相)/주의점, 운세 시기(15-30세)
 
 ### 눈썹 (형제궁·복덕궁)
-- 형태: (농도, 길이, 모양, 눈썹 결, 눈썹 사이 거리)
-- 길상: (인맥운, 성격의 장점)
-- 흉상/주의점: (인간관계에서 주의할 패턴)
-- 31-34세 운세 흐름
+- 형태, 길상, 흉상/주의점, 31-34세 운세
 
 ### 눈 (감찰궁·처첩궁·남녀궁)
-- 형태: (크기, 모양, 눈매, 눈동자 크기, 흰자위 비율, 눈꺼풀, 쌍꺼풀 유무)
-- 눈의 유형: (용안/봉안/호안/우안 등 해당되는 유형과 의미)
-- 길상: (지혜, 판단력, 이성운의 장점)
-- 흉상/주의점: (성격적 약점, 인간관계 주의점, 삼백안/사백안 여부)
-- 35-40세 운세 흐름
+- 형태, 눈의 유형, 길상, 흉상/주의점, 35-40세 운세
 
 ### 코 (재백궁·질액궁)
-- 형태: (콧대 높이와 곧음, 콧방울 크기, 코끝 모양, 산근 높이, 비율)
-- 코의 유형: (사자비/현담비/매부리코 등)
-- 길상: (재물운, 사업 능력의 장점)
-- 흉상/주의점: (재물 관리에서 주의할 점, 산근 상태에 따른 건강 경고)
-- 41-50세 중년운 분석 (코는 40대를 지배)
+- 형태, 코의 유형, 길상, 흉상/주의점, 41-50세 중년운
 
 ### 입·인중 (출납궁)
-- 형태: (입술 두께·색상, 입 크기, 입꼬리 방향, 인중 깊이·길이·폭)
-- 길상: (언변, 식복, 애정운의 장점)
-- 흉상/주의점: (말실수 경향, 구설수 주의, 식탐/절제 문제)
-- 51-60세 장년운 분석
+- 형태, 길상, 흉상/주의점, 51-60세 장년운
 
 ### 턱·얼굴형 (노복궁)
-- 형태: (턱선 각도, 턱 넓이, 광대뼈와의 균형, 전체 얼굴형)
-- 길상: (말년복, 부동산운, 리더십)
-- 흉상/주의점: (만년 건강, 고독 가능성, 완고함 주의)
-- 61세 이후 노년운 전망
+- 형태, 길상, 흉상/주의점, 61세 이후 노년운
 
 ### 귀 (채청궁) - 보이는 경우
-- 형태: (크기, 귓볼, 위치, 모양)
-- 길상과 주의점
-- 유년운(1-14세) 회고 분석
+- 형태, 길상과 주의점
 
 ### 법령선·주름
-- 형태와 깊이
-- 의지력과 리더십 분석
-- 주의해야 할 건강 신호
+- 형태, 의지력/리더십, 건강 신호
 
 ## 🔴 핵심 주의사항 & 경고
-(관상에서 보이는 가장 주의해야 할 3-5가지를 솔직하게 경고. 건강 위험, 재물 손실 위험 시기, 인간관계 문제 패턴, 성격적 약점으로 인한 위기 등. 각각에 대한 구체적 예방/개선 방법도 함께.)
+(3-5가지 솔직한 경고 + 각각의 예방/개선 방법)
 
 ## 💼 사업·재물운 심층 분석
-(재물을 모으는 능력과 약점, 사업 성공 가능성, 투자 성향과 주의점, 동업 적합성, 재물이 들어오는 시기와 방향, 재물 손실이 우려되는 시기와 원인을 6-8문장으로 구체적 분석. 낙관적이지만 현실적으로.)
+(6-8문장)
 
 ## 🎯 진로·적성 분석
-(오행 체질과 이목구비 분석을 종합한 적합 직업/진로를 구체적으로 5-7개 제시. 각 직업이 왜 맞는지 관상학적 근거 설명. 피해야 할 직업/분야도 2-3개 언급. 창업 vs 취업 적합도, 리더형 vs 전문가형 판별.)
+(적합 직업 5-7개 + 피해야 할 분야 2-3개 + 창업/취업/리더/전문가형 판별)
 
 ## 💕 연애·대인운 심층 분석
-(연애 스타일과 함정, 이상형, 결혼 적기, 배우자운, 자녀운, 이혼 위험도, 바람기 가능성, 직장/친구 관계 패턴, 고독 가능성을 6-8문장으로 솔직 분석. 좋은 점과 주의점 균형.)
+(6-8문장)
 
 ## 🏥 건강운 심층 분석
-(오행 체질에 따른 취약 장기, 기색으로 보는 현재 건강 상태, 나이별 주의 질환, 장수 가능성, 생활습관 개선 포인트를 5-6문장으로 구체 분석. 심각한 경고도 부드럽지만 명확하게.)
+(5-6문장)
 
 ${ageSpecificSection}
 
 ## ✨ 타고난 강점 & 특별한 복
-(이 관상의 확실한 장점 5-7가지를 구체적으로. 각각 관상학적 근거와 함께. 너무 과장하지 말고 실제로 보이는 것만.)
+(5-7가지)
 
 ## ⚠️ 보완이 필요한 약점
-(솔직하게 약점 4-6가지 지적. 각각에 대한 관상학적 근거와 실천 가능한 개선 방법. "관상은 마음에서 나온다(相由心生)"는 원칙에 따라 표정, 습관, 마인드셋 변화로 관상도 변할 수 있음을 설명.)
+(4-6가지 + 개선 방법)
 
 ## 🔄 인생 로드맵 & 전략적 조언
-(관상에서 보이는 인생의 큰 그림. 각 10년 단위별 운세 흐름과 핵심 전략. 기회를 잡아야 할 시기, 조심해야 할 시기, 도약의 시기를 구체적으로. 피해야 할 상황과 추구해야 할 방향을 명확히.)
 
 ## 🌟 종합 운세 점수 (10점 만점)
-- 재물운: (X/10) - 한줄 근거
-- 사업운: (X/10) - 한줄 근거
-- 직장운: (X/10) - 한줄 근거
-- 연애운: (X/10) - 한줄 근거
-- 결혼운: (X/10) - 한줄 근거
-- 건강운: (X/10) - 한줄 근거
-- 대인운: (X/10) - 한줄 근거
-- 학업·지성운: (X/10) - 한줄 근거
-- 리더십운: (X/10) - 한줄 근거
-- 종합운: (X/10) - 총평 한마디
+- 재물운: (X/10)
+- 사업운: (X/10)
+- 직장운: (X/10)
+- 연애운: (X/10)
+- 결혼운: (X/10)
+- 건강운: (X/10)
+- 대인운: (X/10)
+- 학업·지성운: (X/10)
+- 리더십운: (X/10)
+- 종합운: (X/10)
 
-(점수는 현실적으로. 모두 7점 이상 주지 마세요. 약한 부분은 4-5점도 줄 수 있습니다. 10점 만점은 극히 드문 대길상에만.)
+(점수는 현실적으로. 모두 7점 이상 주지 마세요.)
 
 ## 💎 마무리: 관상가의 한마디
-(전통 관상학의 "상불독론(相不獨論 - 하나의 상으로만 판단하지 않는다)", "상유심생(相由心生 - 관상은 마음에서 나온다)" 원칙을 인용하며, 관상은 참고이지 운명의 전부가 아님을 강조. 그러면서도 이 관상의 가장 핵심적인 메시지 한 가지를 전달. 격려하되 현실적으로.)
-
-## 분석 시 반드시 지켜야 할 원칙:
-1. **교차 검증**: 하나의 특징만으로 판단하지 말고, 최소 3가지 이상의 관상 요소를 종합하여 결론 도출
-2. **양면 분석**: 모든 특징에 대해 길상과 흉상을 모두 언급. 장점만 나열하면 안 됨
-3. **구체적 시기**: 운세의 시기를 구체적 나이/시기로 제시 (마의상법의 백세유년도 기준)
-4. **실용적 조언**: 추상적 격려가 아닌, 실생활에서 실천 가능한 구체적 조언
-5. **진로 매칭**: 오행 체질 + 이목구비 종합으로 구체적 직업/진로 제안
-6. **건강 경고**: 기색과 관상에서 보이는 건강 위험은 반드시 언급
-7. **흉상의 개선법**: 부정적 요소를 말할 때는 반드시 개선 방법도 함께 제시
 
 한국어로 답변하세요. 전문적이되 이해하기 쉽게, 솔직하되 건설적으로 작성하세요.`;
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const apiKey = process.env.GEMINI_API_KEY;
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
 
+  try {
+    const apiKey = env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.error("GEMINI_API_KEY is not set");
-      return NextResponse.json(
-        { error: "API 설정 오류입니다." },
-        { status: 500 },
-      );
+      return new Response(JSON.stringify({ error: "API 설정 오류입니다." }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const { image, age } = await request.json();
+    const body: any = await request.json();
+    const { image, age } = body;
 
     if (!image) {
-      return NextResponse.json(
-        { error: "이미지가 필요합니다." },
-        { status: 400 },
-      );
+      return new Response(JSON.stringify({ error: "이미지가 필요합니다." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
-    // base64 데이터 추출
     const base64Match = image.match(/^data:(.+);base64,(.+)$/);
     if (!base64Match) {
-      return NextResponse.json(
-        { error: "이미지 형식이 올바르지 않습니다." },
-        { status: 400 },
+      return new Response(
+        JSON.stringify({ error: "이미지 형식이 올바르지 않습니다." }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
       );
     }
 
     const mimeType = base64Match[1];
     const base64Data = base64Match[2];
-
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash-preview-05-20",
-    });
-
     const prompt = buildPrompt(age ? Number(age) : undefined);
 
-    const result = await model.generateContent([
-      prompt,
-      {
-        inlineData: {
-          mimeType: mimeType,
-          data: base64Data,
-        },
-      },
-    ]);
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
-    const response = await result.response;
-    const text = response.text();
+    const geminiResponse = await fetch(geminiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              {
+                inline_data: {
+                  mime_type: mimeType,
+                  data: base64Data,
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    });
 
-    return NextResponse.json({ result: text });
-  } catch (error: unknown) {
-    console.error("Gemini API error:", error);
+    if (!geminiResponse.ok) {
+      const errText = await geminiResponse.text();
+      console.error("Gemini API error:", errText);
 
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorStr = JSON.stringify(
-      error,
-      Object.getOwnPropertyNames(error || {}),
-    );
-    console.error("Error details:", errorStr);
-
-    if (errorMessage.includes("API_KEY") || errorMessage.includes("API key")) {
-      return NextResponse.json(
-        { error: "API 키가 유효하지 않습니다." },
-        { status: 500 },
-      );
-    }
-    if (errorMessage.includes("SAFETY") || errorMessage.includes("blocked")) {
-      return NextResponse.json(
-        { error: "이미지를 분석할 수 없습니다. 다른 사진을 시도해주세요." },
-        { status: 400 },
-      );
-    }
-    if (
-      errorMessage.includes("not valid") ||
-      errorMessage.includes("invalid image")
-    ) {
-      return NextResponse.json(
+      if (geminiResponse.status === 429) {
+        return new Response(
+          JSON.stringify({
+            error: "요청이 너무 많습니다. 1분 후 다시 시도해주세요.",
+          }),
+          {
+            status: 429,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+      return new Response(
+        JSON.stringify({ error: "분석 중 오류가 발생했습니다." }),
         {
-          error:
-            "이미지가 너무 작거나 손상되었습니다. 다른 사진을 시도해주세요.",
+          status: 500,
+          headers: { "Content-Type": "application/json" },
         },
-        { status: 400 },
-      );
-    }
-    if (
-      errorMessage.includes("quota") ||
-      errorMessage.includes("rate") ||
-      errorMessage.includes("429") ||
-      errorMessage.includes("Resource")
-    ) {
-      return NextResponse.json(
-        { error: "요청이 너무 많습니다. 1분 후 다시 시도해주세요." },
-        { status: 429 },
-      );
-    }
-    if (errorMessage.includes("not found") || errorMessage.includes("404")) {
-      return NextResponse.json(
-        { error: "API 모델을 찾을 수 없습니다." },
-        { status: 500 },
       );
     }
 
-    return NextResponse.json(
-      { error: `분석 오류: ${errorMessage.slice(0, 100)}` },
-      { status: 500 },
+    const data: any = await geminiResponse.json();
+    const text =
+      data.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "분석 결과를 생성할 수 없습니다.";
+
+    return new Response(JSON.stringify({ result: text }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("Analyze error:", error);
+    return new Response(
+      JSON.stringify({ error: "분석 중 오류가 발생했습니다." }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
     );
   }
-}
+};

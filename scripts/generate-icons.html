@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head><title>Generate PNG Icons</title></head>
+<body>
+<h2>아이콘 생성기</h2>
+<p>아래 버튼을 클릭하여 PNG 아이콘을 다운로드하세요.</p>
+<button onclick="generate(192, 'icon-192.png')">192x192 다운로드</button>
+<button onclick="generate(512, 'icon-512.png')">512x512 다운로드</button>
+<canvas id="c" style="display:none"></canvas>
+<script>
+function generate(size, filename) {
+  const canvas = document.getElementById('c');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const r = size * 96 / 512;
+
+  // Background
+  const bgGrad = ctx.createLinearGradient(0, 0, size, size);
+  bgGrad.addColorStop(0, '#1e1b4b');
+  bgGrad.addColorStop(1, '#0a0a1a');
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, r);
+  ctx.fillStyle = bgGrad;
+  ctx.fill();
+
+  // Gold gradient
+  const goldGrad = ctx.createLinearGradient(0, 0, size, size);
+  goldGrad.addColorStop(0, '#fbbf24');
+  goldGrad.addColorStop(1, '#f59e0b');
+
+  const s = size / 512;
+
+  // Face circle
+  ctx.beginPath();
+  ctx.arc(256*s, 200*s, 80*s, 0, Math.PI*2);
+  ctx.strokeStyle = goldGrad;
+  ctx.lineWidth = 8*s;
+  ctx.stroke();
+
+  // Smile
+  ctx.beginPath();
+  ctx.moveTo(176*s, 320*s);
+  ctx.quadraticCurveTo(256*s, 400*s, 336*s, 320*s);
+  ctx.strokeStyle = goldGrad;
+  ctx.lineWidth = 8*s;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Eyes
+  ctx.fillStyle = goldGrad;
+  ctx.beginPath();
+  ctx.arc(220*s, 190*s, 12*s, 0, Math.PI*2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(292*s, 190*s, 12*s, 0, Math.PI*2);
+  ctx.fill();
+
+  // Nose
+  ctx.beginPath();
+  ctx.moveTo(240*s, 220*s);
+  ctx.quadraticCurveTo(256*s, 235*s, 272*s, 220*s);
+  ctx.strokeStyle = goldGrad;
+  ctx.lineWidth = 6*s;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // AI text
+  ctx.fillStyle = goldGrad;
+  ctx.font = `bold ${48*s}px Arial`;
+  ctx.textAlign = 'center';
+  ctx.fillText('AI', 256*s, 420*s);
+
+  // Download
+  const link = document.createElement('a');
+  link.download = filename;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Cloudflare Pages 배포 설정
+# 참고: Pages 프로젝트는 대시보드에서 먼저 생성 필요
+# 환경변수 GEMINI_API_KEY는 Cloudflare 대시보드에서 설정
+
+name = "facefortune"
+compatibility_date = "2024-12-01"
+
+[vars]
+# GEMINI_API_KEY는 대시보드 > Settings > Environment Variables에서 설정
+# 절대 여기에 직접 입력하지 마세요!

@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -10,83 +10,142 @@ import {
   Text,
   TouchableOpacity,
   PermissionsAndroid,
-  Alert
-} from 'react-native';
-import { WebView, WebViewNavigation } from 'react-native-webview';
-import * as SplashScreen from 'expo-splash-screen';
-import * as ImagePicker from 'expo-image-picker';
-import * as Speech from 'expo-speech';
+  Alert,
+  Linking,
+  Modal,
+} from "react-native";
+import { WebView, WebViewNavigation } from "react-native-webview";
+import * as SplashScreen from "expo-splash-screen";
+import * as ImagePicker from "expo-image-picker";
+import * as Speech from "expo-speech";
 
 // 스플래시 스크린 유지
 SplashScreen.preventAutoHideAsync();
 
-const WEB_URL = 'https://isw-seem.vercel.app';
+const WEB_URL = "https://facefortune.pages.dev";
+const GITHUB_REPO = "insushim/iswseem";
+const CURRENT_VERSION = "1.1.0";
 
 export default function App() {
   const webViewRef = useRef<WebView>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState<{
+    version: string;
+    url: string;
+  } | null>(null);
 
   // 권한 요청
   useEffect(() => {
     const requestPermissions = async () => {
-      if (Platform.OS === 'android') {
+      if (Platform.OS === "android") {
         try {
           const cameraGranted = await PermissionsAndroid.request(
             PermissionsAndroid.PERMISSIONS.CAMERA,
             {
-              title: 'FaceFortune.ai 카메라 권한',
-              message: '관상 분석을 위해 카메라 접근 권한이 필요합니다.',
-              buttonPositive: '허용',
-              buttonNegative: '거부',
-            }
+              title: "FaceFortune.ai 카메라 권한",
+              message: "관상 분석을 위해 카메라 접근 권한이 필요합니다.",
+              buttonPositive: "허용",
+              buttonNegative: "거부",
+            },
           );
 
           // Android 13+ 에서는 READ_MEDIA_IMAGES 사용
           if (Platform.Version >= 33) {
             await PermissionsAndroid.request(
-              'android.permission.READ_MEDIA_IMAGES' as any,
+              "android.permission.READ_MEDIA_IMAGES" as any,
               {
-                title: 'FaceFortune.ai 갤러리 권한',
-                message: '관상 분석을 위해 갤러리 접근 권한이 필요합니다.',
-                buttonPositive: '허용',
-                buttonNegative: '거부',
-              }
+                title: "FaceFortune.ai 갤러리 권한",
+                message: "관상 분석을 위해 갤러리 접근 권한이 필요합니다.",
+                buttonPositive: "허용",
+                buttonNegative: "거부",
+              },
             );
           } else {
             await PermissionsAndroid.request(
               PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
               {
-                title: 'FaceFortune.ai 갤러리 권한',
-                message: '관상 분석을 위해 갤러리 접근 권한이 필요합니다.',
-                buttonPositive: '허용',
-                buttonNegative: '거부',
-              }
+                title: "FaceFortune.ai 갤러리 권한",
+                message: "관상 분석을 위해 갤러리 접근 권한이 필요합니다.",
+                buttonPositive: "허용",
+                buttonNegative: "거부",
+              },
             );
           }
         } catch (err) {
-          console.warn('권한 요청 오류:', err);
+          console.warn("권한 요청 오류:", err);
         }
       } else {
         // iOS
-        const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
-        const { status: mediaStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        const { status: cameraStatus } =
+          await ImagePicker.requestCameraPermissionsAsync();
+        const { status: mediaStatus } =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
       }
     };
 
     requestPermissions();
   }, []);
 
+  // 업데이트 체크
+  useEffect(() => {
+    const checkUpdate = async () => {
+      try {
+        const res = await fetch(
+          `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
+          {
+            headers: { Accept: "application/vnd.github.v3+json" },
+          },
+        );
+        if (!res.ok) return;
+        const release = await res.json();
+        const latestVersion = (release.tag_name || "").replace("v", "");
+        if (
+          latestVersion &&
+          latestVersion !== CURRENT_VERSION &&
+          compareVersions(latestVersion, CURRENT_VERSION) > 0
+        ) {
+          const apkAsset = release.assets?.find((a: any) =>
+            a.name?.endsWith(".apk"),
+          );
+          if (apkAsset) {
+            setUpdateAvailable({
+              version: latestVersion,
+              url: apkAsset.browser_download_url,
+            });
+          }
+        }
+      } catch (e) {
+        // 업데이트 체크 실패는 무시
+      }
+    };
+    checkUpdate();
+  }, []);
+
+  // 버전 비교 (1.2.0 > 1.1.0 = 양수)
+  const compareVersions = (a: string, b: string): number => {
+    const pa = a.split(".").map(Number);
+    const pb = b.split(".").map(Number);
+    for (let i = 0; i < 3; i++) {
+      const diff = (pa[i] || 0) - (pb[i] || 0);
+      if (diff !== 0) return diff;
+    }
+    return 0;
+  };
+
   // 뒤로가기 처리
   useEffect(() => {
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (canGoBack && webViewRef.current) {
-        webViewRef.current.goBack();
-        return true;
-      }
-      return false;
-    });
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        if (canGoBack && webViewRef.current) {
+          webViewRef.current.goBack();
+          return true;
+        }
+        return false;
+      },
+    );
 
     return () => backHandler.remove();
   }, [canGoBack]);
@@ -139,7 +198,7 @@ export default function App() {
       `);
 
       await Speech.speak(text, {
-        language: 'ko-KR',
+        language: "ko-KR",
         rate: 0.9,
         pitch: 1.0,
         onDone: () => {
@@ -158,7 +217,7 @@ export default function App() {
         },
       });
     } catch (error) {
-      console.log('Speech error:', error);
+      console.log("Speech error:", error);
       setIsSpeaking(false);
     }
   }, []);
@@ -173,59 +232,62 @@ export default function App() {
         true;
       `);
     } catch (error) {
-      console.log('Stop speech error:', error);
+      console.log("Stop speech error:", error);
     }
   }, []);
 
   // WebView 메시지 수신 (파일 선택 요청)
-  const onMessage = useCallback(async (event: any) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
+  const onMessage = useCallback(
+    async (event: any) => {
+      try {
+        const data = JSON.parse(event.nativeEvent.data);
 
-      if (data.type === 'selectImage') {
-        // 이미지 선택
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.7,
-          base64: true,
-        });
+        if (data.type === "selectImage") {
+          // 이미지 선택
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.7,
+            base64: true,
+          });
 
-        if (!result.canceled && result.assets[0].base64) {
-          const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
-          webViewRef.current?.injectJavaScript(`
+          if (!result.canceled && result.assets[0].base64) {
+            const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+            webViewRef.current?.injectJavaScript(`
             window.receiveImageFromApp && window.receiveImageFromApp('${base64Image}');
             true;
           `);
-        }
-      } else if (data.type === 'captureImage') {
-        // 카메라 촬영
-        const result = await ImagePicker.launchCameraAsync({
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.7,
-          base64: true,
-        });
+          }
+        } else if (data.type === "captureImage") {
+          // 카메라 촬영
+          const result = await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.7,
+            base64: true,
+          });
 
-        if (!result.canceled && result.assets[0].base64) {
-          const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
-          webViewRef.current?.injectJavaScript(`
+          if (!result.canceled && result.assets[0].base64) {
+            const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+            webViewRef.current?.injectJavaScript(`
             window.receiveImageFromApp && window.receiveImageFromApp('${base64Image}');
             true;
           `);
+          }
+        } else if (data.type === "speak") {
+          // TTS 시작/토글
+          startSpeech(data.text);
+        } else if (data.type === "stopSpeaking") {
+          // TTS 중지
+          stopSpeech();
         }
-      } else if (data.type === 'speak') {
-        // TTS 시작/토글
-        startSpeech(data.text);
-      } else if (data.type === 'stopSpeaking') {
-        // TTS 중지
-        stopSpeech();
+      } catch (error) {
+        console.log("Message parsing error:", error);
       }
-    } catch (error) {
-      console.log('Message parsing error:', error);
-    }
-  }, [startSpeech, stopSpeech]);
+    },
+    [startSpeech, stopSpeech],
+  );
 
   // 파일 다운로드 처리
   const onFileDownload = useCallback((event: any) => {
@@ -239,9 +301,7 @@ export default function App() {
         <View style={styles.errorContainer}>
           <Text style={styles.errorIcon}>🔮</Text>
           <Text style={styles.errorTitle}>연결 오류</Text>
-          <Text style={styles.errorMessage}>
-            인터넷 연결을 확인해주세요
-          </Text>
+          <Text style={styles.errorMessage}>인터넷 연결을 확인해주세요</Text>
           <TouchableOpacity style={styles.retryButton} onPress={retry}>
             <Text style={styles.retryButtonText}>다시 시도</Text>
           </TouchableOpacity>
@@ -361,7 +421,7 @@ export default function App() {
         allowFileAccess={true}
         allowFileAccessFromFileURLs={true}
         allowUniversalAccessFromFileURLs={true}
-        originWhitelist={['*']}
+        originWhitelist={["*"]}
         cacheEnabled={true}
         geolocationEnabled={true}
         javaScriptCanOpenWindowsAutomatically={true}
@@ -374,7 +434,11 @@ export default function App() {
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingIcon}>🔮</Text>
             <Text style={styles.loadingTitle}>FaceFortune.ai</Text>
-            <ActivityIndicator size="large" color="#f59e0b" style={styles.spinner} />
+            <ActivityIndicator
+              size="large"
+              color="#f59e0b"
+              style={styles.spinner}
+            />
             <Text style={styles.loadingText}>로딩 중...</Text>
           </View>
         )}
@@ -385,9 +449,41 @@ export default function App() {
         <View style={styles.loadingOverlay}>
           <Text style={styles.loadingIcon}>🔮</Text>
           <Text style={styles.loadingTitle}>FaceFortune.ai</Text>
-          <ActivityIndicator size="large" color="#f59e0b" style={styles.spinner} />
+          <ActivityIndicator
+            size="large"
+            color="#f59e0b"
+            style={styles.spinner}
+          />
           <Text style={styles.loadingText}>AI 관상 분석 서비스</Text>
         </View>
+      )}
+
+      {/* 업데이트 모달 */}
+      {updateAvailable && (
+        <Modal transparent animationType="fade" visible={true}>
+          <View style={styles.updateOverlay}>
+            <View style={styles.updateModal}>
+              <Text style={styles.updateIcon}>🔄</Text>
+              <Text style={styles.updateTitle}>새 버전 출시!</Text>
+              <Text style={styles.updateMessage}>
+                v{updateAvailable.version} 버전이 출시되었습니다.{"\n"}
+                업데이트하면 더 정확한 관상 분석을 받을 수 있습니다.
+              </Text>
+              <TouchableOpacity
+                style={styles.updateButton}
+                onPress={() => Linking.openURL(updateAvailable.url)}
+              >
+                <Text style={styles.updateButtonText}>업데이트 다운로드</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.updateLater}
+                onPress={() => setUpdateAvailable(null)}
+              >
+                <Text style={styles.updateLaterText}>나중에</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       )}
     </SafeAreaView>
   );
@@ -396,31 +492,31 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a1a',
+    backgroundColor: "#0a0a1a",
   },
   webview: {
     flex: 1,
-    backgroundColor: '#0a0a1a',
+    backgroundColor: "#0a0a1a",
   },
   loadingContainer: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0a0a1a',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#0a0a1a",
   },
   loadingOverlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0a0a1a',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#0a0a1a",
   },
   loadingIcon: {
     fontSize: 64,
@@ -428,8 +524,8 @@ const styles = StyleSheet.create({
   },
   loadingTitle: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fbbf24',
+    fontWeight: "bold",
+    color: "#fbbf24",
     marginBottom: 24,
   },
   spinner: {
@@ -437,13 +533,13 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: '#94a3b8',
+    color: "#94a3b8",
   },
   errorContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0a0a1a',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#0a0a1a",
     padding: 20,
   },
   errorIcon: {
@@ -452,27 +548,82 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontWeight: "bold",
+    color: "#fff",
     marginBottom: 8,
   },
   errorMessage: {
     fontSize: 16,
-    color: '#94a3b8',
+    color: "#94a3b8",
     marginBottom: 24,
-    textAlign: 'center',
+    textAlign: "center",
   },
   retryButton: {
     paddingVertical: 12,
     paddingHorizontal: 32,
-    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+    backgroundColor: "rgba(251, 191, 36, 0.1)",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#fbbf24',
+    borderColor: "#fbbf24",
   },
   retryButtonText: {
     fontSize: 18,
-    color: '#fbbf24',
-    fontWeight: 'bold',
+    color: "#fbbf24",
+    fontWeight: "bold",
+  },
+  updateOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  updateModal: {
+    backgroundColor: "#1a1a2e",
+    borderRadius: 20,
+    padding: 30,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(251,191,36,0.3)",
+    width: "100%",
+    maxWidth: 320,
+  },
+  updateIcon: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  updateTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#fbbf24",
+    marginBottom: 8,
+  },
+  updateMessage: {
+    fontSize: 14,
+    color: "#94a3b8",
+    textAlign: "center",
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  updateButton: {
+    backgroundColor: "#f59e0b",
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 12,
+    marginBottom: 12,
+    width: "100%",
+    alignItems: "center",
+  },
+  updateButtonText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#0a0a1a",
+  },
+  updateLater: {
+    paddingVertical: 8,
+  },
+  updateLaterText: {
+    fontSize: 14,
+    color: "#64748b",
   },
 });
