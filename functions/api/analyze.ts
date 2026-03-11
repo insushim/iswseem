@@ -2,7 +2,7 @@ interface Env {
   GEMINI_API_KEY: string;
 }
 
-function buildPrompt(age?: number): string {
+function buildPrompt(age?: number, hasSideImage?: boolean): string {
   const ageInfo = age
     ? `\n\n**분석 대상자 나이: ${age}세**\n이 나이를 반드시 고려하여 현재 운의 위치, 대운 분석, 진로 조언을 맞춤형으로 제공하세요.`
     : "";
@@ -219,6 +219,13 @@ ${ageSpecificSection}
 
 ## 💎 마무리: 관상가의 한마디
 
+## 🚫 절대 지켜야 할 원칙: 보이지 않는 부위는 분석하지 마라
+- **사진에서 실제로 보이는 부위만 분석하세요.** 보이지 않는 부위를 추측하거나 지어내면 안 됩니다.
+- 귀가 머리카락에 가려져 보이지 않으면: "귀가 보이지 않아 분석할 수 없습니다" 라고 명시하세요. 귀를 상상해서 분석하지 마세요.
+- 이마가 앞머리로 가려져 있으면: "이마가 가려져 정확한 분석이 어렵습니다" 라고 명시하세요.
+- 법령선, 인중 등이 화질/각도로 확인 불가하면: 확인 불가라고 솔직히 말하세요.
+- 보이지 않는 부위에 대해서는 "옆모습 사진을 추가하면 더 정확한 분석이 가능합니다" 같은 안내를 해주세요.
+${hasSideImage ? "\n**[옆모습 사진이 함께 제공됨]** 두 번째 이미지는 옆모습 사진입니다. 이 사진에서 귀의 형태, 귓볼, 턱선 각도, 코의 옆라인(콧대 높이, 코끝 모양), 이마의 경사 등을 정밀하게 분석하세요. 정면과 옆모습을 교차 검증하여 더 정확한 분석을 제공하세요.\n" : ""}
 한국어로 답변하세요. 전문적이되 이해하기 쉽게, 솔직하되 건설적으로 작성하세요.`;
 }
 
@@ -235,7 +242,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
 
     const body: any = await request.json();
-    const { image, age } = body;
+    const { image, sideImage, age } = body;
 
     if (!image) {
       return new Response(JSON.stringify({ error: "이미지가 필요합니다." }), {
@@ -257,27 +264,38 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
     const mimeType = base64Match[1];
     const base64Data = base64Match[2];
-    const prompt = buildPrompt(age ? Number(age) : undefined);
+    const hasSideImage = !!sideImage;
+    const prompt = buildPrompt(age ? Number(age) : undefined, hasSideImage);
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+    const parts: any[] = [
+      { text: prompt },
+      {
+        inline_data: {
+          mime_type: mimeType,
+          data: base64Data,
+        },
+      },
+    ];
+
+    if (sideImage) {
+      const sideMatch = sideImage.match(/^data:(.+);base64,(.+)$/);
+      if (sideMatch) {
+        parts.push({
+          inline_data: {
+            mime_type: sideMatch[1],
+            data: sideMatch[2],
+          },
+        });
+      }
+    }
+
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
     const geminiResponse = await fetch(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: base64Data,
-                },
-              },
-            ],
-          },
-        ],
+        contents: [{ parts }],
       }),
     });
 

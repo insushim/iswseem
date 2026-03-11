@@ -52,6 +52,7 @@ const safeLocalStorage = {
 
 export default function Home() {
   const [image, setImage] = useState<string | null>(null);
+  const [sideImage, setSideImage] = useState<string | null>(null);
   const [isKakao, setIsKakao] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -60,6 +61,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const sideFileInputRef = useRef<HTMLInputElement>(null);
+  const sideCameraInputRef = useRef<HTMLInputElement>(null);
 
   // 나이 입력
   const [age, setAge] = useState<string>("");
@@ -250,6 +253,7 @@ export default function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         image: image,
+        sideImage: sideImage || undefined,
         age: age ? Number(age) : undefined,
       }),
     })
@@ -276,8 +280,28 @@ export default function Home() {
       });
   };
 
+  const handleSideImageChange = function (e: ChangeEvent<HTMLInputElement>) {
+    var files = e.target.files;
+    var file = files ? files[0] : null;
+    if (file) {
+      if (file.size > 20 * 1024 * 1024) {
+        setError("파일 크기는 20MB 이하여야 합니다.");
+        return;
+      }
+      setError(null);
+      compressImage(file, 800, 0.7)
+        .then(function (compressedImage) {
+          setSideImage(compressedImage);
+        })
+        .catch(function () {
+          setError("이미지 처리 중 오류가 발생했습니다.");
+        });
+    }
+  };
+
   const handleReset = function () {
     setImage(null);
+    setSideImage(null);
     setResult(null);
     setError(null);
     setChatMessages([]);
@@ -285,6 +309,8 @@ export default function Home() {
     stopSpeaking();
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
+    if (sideFileInputRef.current) sideFileInputRef.current.value = "";
+    if (sideCameraInputRef.current) sideCameraInputRef.current.value = "";
   };
 
   // 텍스트 정리 함수
@@ -813,6 +839,116 @@ export default function Home() {
                     />
                     <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-2xl" />
                   </div>
+                  {/* 옆모습 사진 (선택) */}
+                  <div className="mt-3 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 border border-teal-500/20 rounded-xl p-3">
+                    {sideImage ? (
+                      <div className="flex items-center gap-3">
+                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-black/40 ring-1 ring-white/10 flex-shrink-0">
+                          <img
+                            src={sideImage}
+                            alt="옆모습"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-teal-300 text-sm font-medium">
+                            옆모습 사진 추가됨
+                          </p>
+                          <p className="text-slate-500 text-xs">
+                            귀, 턱선, 코 옆라인 정밀 분석
+                          </p>
+                        </div>
+                        <button
+                          onClick={function () {
+                            setSideImage(null);
+                            if (sideFileInputRef.current)
+                              sideFileInputRef.current.value = "";
+                            if (sideCameraInputRef.current)
+                              sideCameraInputRef.current.value = "";
+                          }}
+                          className="text-slate-500 hover:text-red-400 transition-colors p-1"
+                        >
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-teal-300 text-sm font-medium">
+                            옆모습 사진 추가 (선택)
+                          </p>
+                          <p className="text-slate-500 text-xs">
+                            귀, 턱선, 코 옆라인까지 정밀 분석
+                          </p>
+                        </div>
+                        <button
+                          onClick={function () {
+                            if (sideCameraInputRef.current)
+                              sideCameraInputRef.current.click();
+                          }}
+                          className="bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1"
+                        >
+                          <svg
+                            className="w-3.5 h-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                            />
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+                            />
+                          </svg>
+                          촬영
+                        </button>
+                        <button
+                          onClick={function () {
+                            if (sideFileInputRef.current)
+                              sideFileInputRef.current.click();
+                          }}
+                          className="bg-white/5 hover:bg-white/10 text-slate-400 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border border-white/10"
+                        >
+                          갤러리
+                        </button>
+                      </div>
+                    )}
+                    <input
+                      ref={sideCameraInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="user"
+                      onChange={handleSideImageChange}
+                      className="hidden"
+                    />
+                    <input
+                      ref={sideFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleSideImageChange}
+                      className="hidden"
+                    />
+                  </div>
+
                   {/* 나이 입력 */}
                   <div className="mt-3 bg-gradient-to-r from-violet-500/10 to-purple-500/10 border border-violet-500/20 rounded-xl p-3">
                     <label className="flex items-center gap-3">
